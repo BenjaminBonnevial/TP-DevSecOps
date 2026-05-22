@@ -181,3 +181,19 @@ export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };
 ```
+---
+
+## Étape 5 — CI/CD GitHub Actions
+
+### 5.1 Comprendre le workflow
+
+- test : installe les dépendances, génère le client Prisma, lance le linter (next lint) et les tests avec couverture. L'artifact coverage est uploadé pour 7 jours.
+- security : audit npm (--audit-level=high, continue-on-error pour ne pas bloquer sur les CVE Next.js connues) + scan Trivy filesystem.
+- docker : dépend de test et security. Build l'image avec Buildx + cache GitHub Actions, puis Trivy scanne l'image. Le push est désactivé (pas de registry configuré sans les secrets Azure).
+- deploy : dépend des 3 précédents, se lance uniquement sur push sur main. Login Azure → push image sur ACR → déploiement sur Web App. Nécessite les secrets AZURE_CREDENTIALS, ACR_LOGIN_SERVER, ACR_USERNAME, ACR_PASSWORD, AZURE_WEBAPP_NAME.
+
+### 5.2 Exécuter le pipeline
+
+Les jobs test, security et docker doivent passer. Le job deploy est skippé tant que les secrets Azure ne sont pas configurés dans Settings → Secrets and variables → Actions.
+
+Screenshot : Screenshots/githubActions.png
