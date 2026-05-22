@@ -26,3 +26,29 @@ La taille de l'image est de 234 MB.
 
 ---
 
+## Étape 2 - Tests unitaires
+
+### 2.1 Lancer les tests fournis
+
+Tous les tests passent. Screenshots : Screenshots/npmTest.png et Screenshots/srcLib.png.
+
+### 2.2 Ajouter vos propres tests
+
+J'ai ajouté 3 fichiers dans tests/unit/ :
+
+- permissions.test.ts : teste la fonction canEditTicket dans le nouveau fichier src/lib/permissions.ts (6 cas : admin, user propriétaire sur OPEN/IN_PROGRESS, non-propriétaire, ticket RESOLVED, ticket CLOSED)
+- auth-extra.test.ts : token expiré rejeté, getAuthFromRequest sans header et avec un header non-Bearer
+- validators-extra.test.ts : cas limites sur loginSchema (email invalide, mot de passe vide) et ticketUpdateSchema (status inconnu, description trop courte, assigneeId null)
+
+**Quelle est votre couverture finale (% statements / branches / functions) ? Pourquoi est-elle < 100% sur certains fichiers ?**
+
+```
+File              | % Stmts | % Branch | % Funcs | % Lines
+auth.ts           |      88 |     87.5 |     100 |      88
+permissions.ts    |     100 |      100 |     100 |     100
+prisma.ts         |       0 |        0 |       0 |       0
+validators.ts     |     100 |      100 |     100 |     100
+```
+Screenshot/npmRunTestCoverage.png
+
+auth.ts n'est pas à 100% car les lignes 41-43 (getAuthFromRequest avec un vrai token Bearer) sont testées pour les cas d'erreur mais pas le chemin normal complet — instancier un NextRequest avec un JWT valide dans un test Node pur sans le runner Next.js c'est galère. prisma.ts est à 0% volontairement, importer le client Prisma dans les tests unitaires ouvrirait une connexion SQLite, c'est pour les tests d'intégration.
