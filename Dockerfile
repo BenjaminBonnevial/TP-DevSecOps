@@ -23,6 +23,11 @@ RUN npx prisma generate
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
+# Initialise et seede la DB dans l'image (évite le besoin de migration au runtime)
+RUN mkdir -p /app/data
+RUN DATABASE_URL="file:/app/data/prod.db" npx prisma migrate deploy
+RUN DATABASE_URL="file:/app/data/prod.db" npx prisma db seed
+
 # =========================
 # Stage 3: runner
 # =========================
@@ -50,6 +55,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modul
 
 # Création du dossier pour la DB SQLite (writable)
 RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
+
+# DB pré-seedée depuis le stage builder
+COPY --from=builder --chown=nextjs:nodejs /app/data/prod.db /app/data/prod.db
 
 USER nextjs
 
