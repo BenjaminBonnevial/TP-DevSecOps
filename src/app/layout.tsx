@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Helpdesk — Support Tickets',
+  title: 'Helpdesk - Support Tickets',
   description: 'Plateforme de gestion de tickets de support',
 };
 

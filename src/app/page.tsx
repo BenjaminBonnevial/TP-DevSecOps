@@ -69,7 +69,7 @@ export default function HomePage() {
             Demo credentials
           </p>
           <h2 className="font-display font-bold text-4xl mb-8 tracking-tight">
-            Try it now — no setup.
+            Try it now - no setup.
           </h2>
           <div className="grid md:grid-cols-3 gap-4">
             {[

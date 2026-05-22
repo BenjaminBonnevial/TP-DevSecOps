@@ -51,11 +51,11 @@ validators.ts     |     100 |      100 |     100 |     100
 ```
 Screenshot/npmRunTestCoverage.png
 
-auth.ts n'est pas à 100% car les lignes 41-43 (getAuthFromRequest avec un vrai token Bearer) sont testées pour les cas d'erreur mais pas le chemin normal complet — instancier un NextRequest avec un JWT valide dans un test Node pur sans le runner Next.js c'est galère. prisma.ts est à 0% volontairement, importer le client Prisma dans les tests unitaires ouvrirait une connexion SQLite, c'est pour les tests d'intégration.
+auth.ts n'est pas à 100% car les lignes 41-43 (getAuthFromRequest avec un vrai token Bearer) sont testées pour les cas d'erreur mais pas le chemin normal complet - instancier un NextRequest avec un JWT valide dans un test Node pur sans le runner Next.js c'est galère. prisma.ts est à 0% volontairement, importer le client Prisma dans les tests unitaires ouvrirait une connexion SQLite, c'est pour les tests d'intégration.
 
 ---
 
-## Étape 3 — Tests de montée en charge avec k6
+## Étape 3 - Tests de montée en charge avec k6
 
 ### 3.1 Smoke test
 
@@ -73,7 +73,7 @@ VUs max:       50
 Durée:         4 min
 ```
 
-Le seuil p(95) < 500ms est dépassé (9330ms réels). Aucune requête n'a échoué — l'app répond toujours, mais très lentement. Le goulot d'étranglement est SQLite : à 50 VUs concurrents qui font tous des INSERT (création de ticket), les écritures se sérialisent à cause du verrou exclusif de SQLite. La latence explose au palier des 50 VUs mais l'app ne tombe pas.
+Le seuil p(95) < 500ms est dépassé (9330ms réels). Aucune requête n'a échoué - l'app répond toujours, mais très lentement. Le goulot d'étranglement est SQLite : à 50 VUs concurrents qui font tous des INSERT (création de ticket), les écritures se sérialisent à cause du verrou exclusif de SQLite. La latence explose au palier des 50 VUs mais l'app ne tombe pas.
 
 Le fichier k6-summary.json est disponible à la racine du projet. Screenshot : Screenshots/k6Load.png
 
@@ -87,6 +87,97 @@ avg latency:   24296 ms
 Iterations:    546 complètes + 141 interrompues
 ```
 
-Les 3 thresholds sont croisés (errors, http_req_duration, http_req_failed). Des timeouts apparaissent explicitement dans les logs à partir de t=202s (palier ~100 VUs) et s'accumulent massivement à t=226s. L'app ne crash pas mais répond en 55s au p(95) — c'est inutilisable. Le point de rupture est autour de 100 VUs : c'est là que la file d'attente SQLite dépasse les timeouts de connexion et que les requêtes commencent à être abandonnées.
+Les 3 thresholds sont croisés (errors, http_req_duration, http_req_failed). Des timeouts apparaissent explicitement dans les logs à partir de t=202s (palier ~100 VUs) et s'accumulent massivement à t=226s. L'app ne crash pas mais répond en 55s au p(95) - c'est inutilisable. Le point de rupture est autour de 100 VUs : c'est là que la file d'attente SQLite dépasse les timeouts de connexion et que les requêtes commencent à être abandonnées.
 
 Screenshot : Screenshots/k6200vus.png
+
+---
+
+## Étape 4 - Sécurité
+
+### 4.1 Audit des dépendances
+
+```
+11 vulnerabilities (7 moderate, 4 high)
+```
+
+Les vulnérabilités HIGH concernent :
+- Next.js 14.2.33 : multiples CVE (DoS via Server Components, cache poisoning, HTTP request smuggling, SSRF via WebSocket, XSS). La correction impose de passer en Next.js 15+ (breaking change).
+- glob : injection de commande via le flag CLI `-c/--cmd` (affecte eslint-config-next, pas le runtime de prod).
+
+Les vulnérabilités MODERATE concernent esbuild (uniquement côté dev server) et postcss (XSS dans la sortie CSS stringify, là encore en contexte de build).
+
+Aucune vulnérabilité dans les dépendances de production directes (bcryptjs, jsonwebtoken, zod, @prisma/client). Le risque réel en production se limite aux CVE Next.js.
+
+Screenshot : Screenshots/npmAudit.png
+
+### 4.2 Scan d'image Docker avec Trivy
+
+```
+trivy image helpdesk:dev --severity HIGH,CRITICAL
+```
+
+Screenshot : Screenshots/trivyScan.png
+
+### 4.3 Pentest guidé
+
+#### 4.3.1 JWT secret faible
+
+**Ça marche ? Pourquoi ? Quelles seraient les 3 mitigations ? (taille du secret, rotation, alg, etc.)** 
+
+Oui. 
+En signant un nouveau token avec `role: "ADMIN"` via le secret présent dans `.env`, la requête `DELETE /api/tickets/<id>` retourne `{"ok": true}` - le ticket est supprimé.
+
+Pourquoi : 
+JWT HS256 est un mécanisme symétrique. Quiconque connaît le secret peut signer n'importe quel payload. Si le secret fuite (fichier `.env` en clair, logs, variable d'environnement exposée), l'attaquant forge des tokens avec le rôle de son choix et le serveur les accepte sans distinction.
+
+3 mitigations :
+1. Secret fort et aléatoire : au moins 256 bits générés avec `openssl rand -base64 32`, jamais un string lisible.
+2. Algorithme asymétrique (RS256 ou ES256) : la clé privée signe, la clé publique vérifie. Même en ayant le token, on ne peut pas re-signer sans la clé privée.
+3. Durée de vie courte + rotation : `expiresIn: '15m'` avec refresh token, et révocation côté serveur (denylist en Redis ou rotation de secret).
+
+#### 4.3.2 Authorization bypass
+
+La requête `GET /api/tickets/<id-admin>` avec un token USER retourne `{"error":"Forbidden"}` (403). 
+
+Le bypass est donc bloqué sur ce endpoint.La protection est répétée manuellement dans chaque handler. Une politique RBAC centralisée (middleware ou hook Prisma) serait plus robuste et moins sensible aux oublis.
+
+#### 4.3.3 Headers de sécurité manquants
+
+**Quels headers de sécurité manquent ? (CSP, X-Frame-Options, Strict-Transport-Security, X-Content-Type-Options). Proposez un middleware Next.js qui les ajoute (code à inclure dans le rapport).**
+
+La réponse HTTP ne contient aucun header de sécurité. Headers absents :
+
+- Content-Security-Policy
+- X-Frame-Options
+- Strict-Transport-Security
+- X-Content-Type-Options
+- Referrer-Policy
+- Permissions-Policy
+
+Middleware Next.js à ajouter dans `src/middleware.ts` :
+
+```typescript
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+
+export function middleware(request: NextRequest) {
+  const response = NextResponse.next();
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  response.headers.set('X-Frame-Options', 'DENY');
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  response.headers.set(
+    'Content-Security-Policy',
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+  );
+  if (process.env.NODE_ENV === 'production') {
+    response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  return response;
+}
+
+export const config = {
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+};
+```

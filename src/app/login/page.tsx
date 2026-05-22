@@ -97,7 +97,7 @@ export default function LoginPage() {
             <p className="font-display text-3xl font-medium leading-tight">
               &ldquo;The best support tools<br />get out of the way.&rdquo;
             </p>
-            <p className="mt-4 font-mono text-xs text-paper/50">— Anonymous SRE, 2024</p>
+            <p className="mt-4 font-mono text-xs text-paper/50">- Anonymous SRE, 2024</p>
           </div>
         </div>
       </div>

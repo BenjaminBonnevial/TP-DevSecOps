@@ -1,4 +1,4 @@
-// Test de montée en charge — Helpdesk API
+// Test de montée en charge - Helpdesk API
 // Exécution : k6 run k6/load-test.js
 // ou avec un BASE_URL custom : k6 run -e BASE_URL=http://app:3000 k6/load-test.js
 
@@ -34,7 +34,7 @@ export function setup() {
   }), { headers: { 'Content-Type': 'application/json' } });
 
   if (res.status !== 200) {
-    throw new Error(`Setup failed — login returned ${res.status}: ${res.body}`);
+    throw new Error(`Setup failed - login returned ${res.status}: ${res.body}`);
   }
   return { token: res.json('token') };
 }
@@ -83,7 +83,7 @@ function textSummary(data) {
   const m = data.metrics;
   return `
 ========================================
-  k6 LOAD TEST — HELPDESK
+  k6 LOAD TEST - HELPDESK
 ========================================
   Requests:      ${m.http_reqs.values.count}
   Failed:        ${(m.http_req_failed.values.rate * 100).toFixed(2)}%

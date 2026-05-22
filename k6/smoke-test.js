@@ -1,4 +1,4 @@
-// Smoke test — vérifie que l'app répond avant de lancer le load test
+// Smoke test - vérifie que l'app répond avant de lancer le load test
 // k6 run k6/smoke-test.js
 
 import http from 'k6/http';
