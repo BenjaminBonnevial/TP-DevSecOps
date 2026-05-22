@@ -14,14 +14,14 @@ const BASE_URL = __ENV.BASE_URL || 'http://localhost:3000';
 
 export const options = {
   stages: [
-    { duration: '30s', target: 10 },  // montée à 10 VUs
-    { duration: '1m', target: 50 },   // montée à 50 VUs
-    { duration: '2m', target: 50 },   // palier à 50 VUs
-    { duration: '30s', target: 0 },   // descente
+    { duration: '1m',    target: 100 },  // montée à 100 VUs
+    { duration: '2m',    target: 200 },  // montée à 200 VUs
+    { duration: '1m30s', target: 200 },  // palier à 200 VUs
+    { duration: '30s',   target: 0 },    // descente
   ],
   thresholds: {
-    http_req_duration: ['p(95)<500'],   // 95% des requêtes sous 500ms
-    http_req_failed: ['rate<0.01'],     // taux d'erreur < 1%
+    http_req_duration: ['p(95)<500'],
+    http_req_failed: ['rate<0.01'],
     errors: ['rate<0.05'],
   },
 };

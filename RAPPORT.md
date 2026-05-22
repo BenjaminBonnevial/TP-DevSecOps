@@ -52,3 +52,41 @@ validators.ts     |     100 |      100 |     100 |     100
 Screenshot/npmRunTestCoverage.png
 
 auth.ts n'est pas à 100% car les lignes 41-43 (getAuthFromRequest avec un vrai token Bearer) sont testées pour les cas d'erreur mais pas le chemin normal complet — instancier un NextRequest avec un JWT valide dans un test Node pur sans le runner Next.js c'est galère. prisma.ts est à 0% volontairement, importer le client Prisma dans les tests unitaires ouvrirait une connexion SQLite, c'est pour les tests d'intégration.
+
+---
+
+## Étape 3 — Tests de montée en charge avec k6
+
+### 3.1 Smoke test
+
+Smoke test passé : 2457 requêtes en 10s avec 1 VU, 0% d'erreur, p(95) à 6.93ms (seuil < 200ms). Screenshot : Screenshots/k6Smoke.png
+
+### 3.2 Test de charge
+
+```
+Requests:      2230
+Failed:        0.00%
+p(95) latency: 9330 ms
+avg latency:   3686 ms
+Iterations:    743
+VUs max:       50
+Durée:         4 min
+```
+
+Le seuil p(95) < 500ms est dépassé (9330ms réels). Aucune requête n'a échoué — l'app répond toujours, mais très lentement. Le goulot d'étranglement est SQLite : à 50 VUs concurrents qui font tous des INSERT (création de ticket), les écritures se sérialisent à cause du verrou exclusif de SQLite. La latence explose au palier des 50 VUs mais l'app ne tombe pas.
+
+Le fichier k6-summary.json est disponible à la racine du projet. Screenshot : Screenshots/k6Load.png
+
+### 3.3 Pousser plus loin - 200 VUs
+
+```
+Requests:      1766
+Failed:        3.79%
+p(95) latency: 55203 ms
+avg latency:   24296 ms
+Iterations:    546 complètes + 141 interrompues
+```
+
+Les 3 thresholds sont croisés (errors, http_req_duration, http_req_failed). Des timeouts apparaissent explicitement dans les logs à partir de t=202s (palier ~100 VUs) et s'accumulent massivement à t=226s. L'app ne crash pas mais répond en 55s au p(95) — c'est inutilisable. Le point de rupture est autour de 100 VUs : c'est là que la file d'attente SQLite dépasse les timeouts de connexion et que les requêtes commencent à être abandonnées.
+
+Screenshot : Screenshots/k6200vus.png
