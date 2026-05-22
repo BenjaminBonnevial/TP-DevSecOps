@@ -194,6 +194,6 @@ export const config = {
 
 ### 5.2 Exécuter le pipeline
 
-Les jobs test, security et docker doivent passer. Le job deploy est skippé tant que les secrets Azure ne sont pas configurés dans Settings → Secrets and variables → Actions.
+Les jobs test, security et docker passent, pas le job deploy.
 
 Screenshot : Screenshots/githubActions.png
