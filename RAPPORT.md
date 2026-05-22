@@ -197,3 +197,71 @@ export const config = {
 Les jobs test, security et docker passent, pas le job deploy.
 
 Screenshot : Screenshots/githubActions.png
+
+---
+
+## Étape 6 — Déploiement Azure for Students
+
+### CI/CD connectée
+
+Le compte Azure for Students ne permet pas de créer des Service Principals (droits Azure AD insuffisants). Le job deploy du workflow a donc été adapté : l'authentification ACR se fait directement avec les credentials du registry (docker/login-action), et le redéploiement est délégué au webhook CD ACR au lieu de passer par azure/webapps-deploy.
+
+Les secrets GitHub ajoutés : ACR_LOGIN_SERVER, ACR_USERNAME, ACR_PASSWORD, AZURE_WEBAPP_NAME.
+
+https://github.com/BenjaminBonnevial/TP-DevSecOps
+https://helpdesk-bb.azurewebsites.net/dashboard
+
+Screenshot : Screenshots/azureDeployed.png
+
+---
+
+## Synthèse finale
+
+### Architecture finale
+
+```
+dev local
+    │
+    └─► GitHub
+              │
+              └─► GitHub Actions CI/CD
+                        │
+                        ├─► test (lint + unit tests + coverage)
+                        ├─► security (npm audit + Trivy fs)
+                        ├─► docker (build image + Trivy image scan)
+                        │
+                        └─► deploy : push image sur ACR
+                                          │
+                                          └─► webhook CD
+                                                    │
+                                                    └─► Azure App Service
+                                                         (helpdesk-bb.azurewebsites.net)
+```
+
+### 3 améliorations DevSecOps avec plus de temps
+
+1. Azure Key Vault pour les secrets : JWT_SECRET et les credentials ACR ne devraient pas être en clair dans les variables d'environnement App Service ni dans les GitHub Secrets. Key Vault avec une Managed Identity permet à l'app de récupérer ses secrets sans jamais les exposer dans la config.
+
+2. Remplacer SQLite par PostgreSQL (Azure Database for PostgreSQL Flexible Server) : SQLite n'est pas conçu pour un usage concurrent. Le test de charge à 100 VUs l'a montré clairement. PostgreSQL résoudrait le problème de verrouillage en écriture, permettrait la réplication, et rendrait les données persistantes indépendamment du container.
+
+3. Monitoring avec Application Insights : aujourd'hui il n'y a aucune visibilité sur ce qui se passe en production (latences, erreurs, taux de succès). Application Insights branché sur l'app Next.js donnerait des métriques en temps réel, des alertes sur les anomalies, et des traces distribuées pour diagnostiquer les lenteurs.
+
+### Coût Azure estimé
+
+- App Service Plan B1 Linux : ~13€/mois
+- Azure Container Registry Basic : ~5€/mois
+- Total : ~18€/mois
+
+Sur un TP de quelques jours, l'impact sur le crédit étudiant de 100€ est de l'ordre de 2-3€.
+
+### Ce qui a posé problème et comment c'est résolu
+
+Plusieurs blocages ont eu lieu lors du TP :
+
+- CI docker job qui échouait sans load: true dans docker/build-push-action : l'image restait dans le cache BuildKit et n'était pas accessible au daemon Docker local pour le scan Trivy. Ajout de load: true dans le step build.
+
+- Répertoire public/ non tracké par Git : le dossier était vide, Git ne le versionne pas, et le Dockerfile y fait référence avec COPY --from=builder /app/public ./public. Le build CI échouait avec "not found". Résolu en ajoutant public/.gitkeep.
+
+- Initialisation de la DB en production : az webapp ssh non disponible sur un container custom sans SSH configuré, et az webapp exec non supporté par la version CLI. Résolu en déplaçant les migrations et le seed dans le stage builder du Dockerfile, la DB est embarquée dans l'image.
+
+- Création du Service Principal impossible : le compte Azure for Students n'a pas les droits Azure AD pour créer des app registrations. Le job deploy a été adapté pour utiliser les credentials ACR directement et le webhook de déploiement continu ACR à la place de azure/webapps-deploy.
